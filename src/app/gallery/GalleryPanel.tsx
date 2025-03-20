@@ -14,6 +14,8 @@ export function GalleryPanel() {
       <div
         style={{
           position: 'sticky',
+          top: 0,
+          zIndex: 100,
         }}
       >
         <GalleryHeader />
