@@ -20,7 +20,6 @@ export function GalleryHeader() {
       <Button variant={'secondary'} size={'icon'}>
         <SidebarTrigger />
       </Button>
-      {'header'}
     </div>
   );
 }

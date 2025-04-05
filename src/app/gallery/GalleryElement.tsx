@@ -8,7 +8,7 @@ export type GalleryElementProps = {
 
 export function GalleryElement({ index, data: imageData }: GalleryElementProps): ReactElement {
   return (
-    <div className="masonry-item" data-index={index} style={{ marginBottom: '8px' }}>
+    <div className="masonry-item" data-index={index}>
       <img
         src={imageData.image_base64}
         alt={imageData.image_name}

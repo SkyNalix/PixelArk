@@ -4,7 +4,7 @@ use base64::{encode};
 use std::fs::File;
 use std::io::Read;
 use serde::Serialize;
-use natord::compare; // For natural sorting
+use natord::compare;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 
@@ -88,4 +88,34 @@ pub fn count_elements_in_dir(directory: &str) -> i32 {
     } else {
         -1
     }
+}
+
+#[tauri::command]
+pub fn get_folder_names(directory: &str) -> Result<Vec<String>, String> {
+    let path = Path::new(directory);
+    
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", directory));
+    }
+
+    if !path.is_dir() {
+        return Err(format!("Path is not a directory: {}", directory));
+    }
+
+    let entries = fs::read_dir(path).map_err(|e| e.to_string())?;
+    
+    let mut folder_names: Vec<String> = entries
+        .filter_map(|entry| {
+            entry.ok().and_then(|e| {
+                if e.path().is_dir() {
+                    e.file_name().to_str().map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+    folder_names.sort_by(|a, b| compare(&a, &b));
+
+    Ok(folder_names)
 }
