@@ -10,8 +10,8 @@ export function GalleryPanel() {
     <GalleryProvider rootPath={DIRECTORY}>
       <div
         style={{
-          height: '100%',
           width: '100%',
+          height: '100%',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -26,9 +26,11 @@ export function GalleryPanel() {
         </div>
         <div
           style={{
+            width: '100%',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
+            paddingTop: '8px',
           }}
         >
           <GridView />

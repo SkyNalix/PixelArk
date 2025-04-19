@@ -41,16 +41,7 @@ export const GalleryFolder = ({ folderName, onClick }: GalleryComponentProps) =>
           marginBottom: '8px',
         }}
       >
-        <OverflowTooltip>
-          <div
-            style={{
-              color: 'var(--text)',
-              textShadow: '2px 2px black',
-            }}
-          >
-            {folderName}
-          </div>
-        </OverflowTooltip>
+        <OverflowTooltip>{folderName}</OverflowTooltip>
       </div>
     </div>
   );

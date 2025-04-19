@@ -78,19 +78,6 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> V
 }
 
 #[tauri::command]
-pub fn count_elements_in_dir(directory: &str) -> i32 {
-    let path = Path::new(directory);
-    if path.is_dir() {
-        match fs::read_dir(path) {
-            Ok(entries) => entries.count() as i32,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
-}
-
-#[tauri::command]
 pub fn get_folder_names(directory: &str) -> Result<Vec<String>, String> {
     let path = Path::new(directory);
     

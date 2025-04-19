@@ -12,13 +12,13 @@ export function GalleryElement({ index, data: imageData }: GalleryElementProps):
       <img
         src={imageData.image_base64}
         alt={imageData.image_name}
+        loading="lazy"
         style={{
           width: '100%',
           height: 'auto',
           objectFit: 'cover',
           borderRadius: '4px',
         }}
-        loading="lazy"
       />
     </div>
   );

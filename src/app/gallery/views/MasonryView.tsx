@@ -7,7 +7,7 @@ import { useGallery } from '@/app/gallery/GalleryContext.tsx';
 const COLUMNS = 3;
 
 export function MasonryView(): ReactElement {
-  const { medias, isCurrentlyLoading, loadNextBatch } = useGallery();
+  const { medias, isCurrentlyLoading, currentDirectory, loadNextBatch } = useGallery();
 
   const [columnAssignments, setColumnAssignments] = useState<number[]>([]);
 
@@ -72,7 +72,7 @@ export function MasonryView(): ReactElement {
       loadNextBatch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bottomInView]);
+  }, [bottomInView, currentDirectory]);
 
   return (
     <div>
@@ -86,21 +86,22 @@ export function MasonryView(): ReactElement {
       >
         {columns.map((columnItems, columnIndex) => (
           <div
-            key={`column-${columnIndex}`}
+            key={columnIndex}
             style={{
               display: 'flex',
               flexDirection: 'column',
+              flexGrow: 1,
               gap: '8px',
             }}
           >
             {columnItems.map(({ imageData, index }) => (
-              <GalleryElement key={`pos-${index}`} index={index} data={imageData} />
+              <GalleryElement key={index} index={index} data={imageData} />
             ))}
           </div>
         ))}
       </div>
 
-      {/* Bottom observer to detect when to load the enxt batch */}
+      {/* Bottom observer to detect when to load the next batch */}
       <div ref={bottomObserverRef}>{isCurrentlyLoading && <div>Loading...</div>}</div>
     </div>
   );

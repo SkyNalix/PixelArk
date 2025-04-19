@@ -14,7 +14,6 @@ interface GalleryContextType {
   currentDirectory: string[];
 
   // Methods
-  loadBatchImages: (start: number, end: number) => Promise<void>;
   loadNextBatch: () => void;
   isBatchLoaded: (start: number, end: number) => boolean;
   setMedias: React.Dispatch<React.SetStateAction<ImageData[]>>;
@@ -96,6 +95,14 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
     loadBatchImages(startIndex, endIndex);
   }, [currentBatch, isCurrentlyLoading, loadBatchImages, isBatchLoaded]);
 
+  // on current directory change
+  useEffect(() => {
+    setMedias([]);
+    setIsCurrentlyLoading(false);
+    setTotalImagesCount(null);
+    setCurrentBatch(0);
+  }, [currentDirectory]);
+
   const value = {
     // States
     medias,
@@ -105,7 +112,6 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
     folderNames,
     currentDirectory,
     // Methods
-    loadBatchImages,
     loadNextBatch,
     isBatchLoaded,
     setMedias,

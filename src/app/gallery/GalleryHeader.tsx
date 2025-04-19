@@ -1,6 +1,5 @@
 import { MAIN_HEADER_HEIGHT } from '@/app/constants.ts';
-import { SidebarTrigger } from '@/components/ui/sidebar.tsx';
-import { Button } from '@/components/ui/button.tsx';
+import { FolderBreadcrumb } from '@/app/gallery/FolderBreadcrumb.tsx';
 
 export function GalleryHeader() {
   return (
@@ -10,16 +9,14 @@ export function GalleryHeader() {
         width: '100%',
         display: 'flex',
         flexDirection: 'row',
-        gap: 5,
+        gap: 8,
 
         alignItems: 'center',
         backgroundColor: 'var(--base)',
         borderBottom: '2px solid var(--border)',
       }}
     >
-      <Button variant={'secondary'} size={'icon'}>
-        <SidebarTrigger />
-      </Button>
+      <FolderBreadcrumb />
     </div>
   );
 }
