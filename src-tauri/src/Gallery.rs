@@ -13,8 +13,8 @@ use crate::{get_project_path, ProjectPath};
 
 #[derive(Serialize)]
 pub struct ImageData {
-    index: i32,
     name: String,
+    path: String,
     width: u32,
     height: u32,
 }
@@ -79,7 +79,7 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
     }
 
     let cache_dir = root_path.join(".cache").join(&directory);
-    fs::create_dir_all(&cache_dir).ok(); // Make sure it exists
+    fs::create_dir(&cache_dir).ok(); // Make sure it exists
 
     // Timers
     let mut read_time = Duration::ZERO;
@@ -90,18 +90,19 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
 
     let mut processed_count = 0;
 
-    for (index, file_path) in image_files
+    for full_path in image_files
         .iter()
-        .enumerate()
         .skip(range_start)
         .take(range_stop.saturating_sub(range_start))
     {
-        let mut file = match File::open(file_path) {
+        let file_path = full_path.strip_prefix(&root_path).ok().unwrap();
+
+        let mut file = match File::open(full_path) {
             Ok(f) => f,
             Err(_) => continue,
         };
 
-        let file_name = match file_path.file_name().and_then(|n| n.to_str()) {
+        let file_name = match full_path.file_name().and_then(|n| n.to_str()) {
             Some(name) => name.to_string(),
             None => continue,
         };
@@ -111,8 +112,8 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                 let width = img.width();
                 let height = img.height();
                 images.push(ImageData {
-                    index: index as i32,
                     name: file_name,
+                    path: file_path.to_string_lossy().to_string(),
                     width,
                     height,
                 });
@@ -159,8 +160,8 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         cache_time += start.elapsed();
 
         images.push(ImageData {
-            index: index as i32,
             name: file_name,
+            path: file_path.to_string_lossy().to_string(),
             width,
             height,
         });
@@ -185,15 +186,15 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
 }
 
 #[tauri::command]
-pub fn get_image_path(file_name: String, state: State<ProjectPath>) -> Result<String, String> {
+pub fn get_image_path(file_path: String, state: State<ProjectPath>) -> Result<String, String> {
     let root_path = get_project_path(state);
     if None == root_path {
         return Err("Project path not defined".to_string());
     }
 
-    let image_path = root_path.unwrap().join(".cache").join(file_name);
-    if image_path.exists() {
-        Ok(image_path.to_string_lossy().into())
+    let file_path = root_path.unwrap().join(".cache").join(file_path);
+    if file_path.exists() {
+        Ok(file_path.to_string_lossy().into())
     } else {
         Err("Image not found".into())
     }

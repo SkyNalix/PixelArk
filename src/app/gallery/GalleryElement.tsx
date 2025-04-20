@@ -2,8 +2,8 @@ import { ImageData } from '@/app/gallery/types.ts';
 import { ReactElement, useEffect, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
-async function loadImageUrl(fileName: string) {
-  const path = await invoke<string>('get_image_path', { fileName });
+async function loadImageUrl(filePath: string) {
+  const path = await invoke<string>('get_image_path', { filePath: filePath });
   return convertFileSrc(path); // converts to file:// url usable in <img>
 }
 
@@ -15,8 +15,8 @@ export function GalleryElement({ imageData }: GalleryElementProps): ReactElement
   const [imageSource, setImageSource] = useState<string | null>(null);
 
   useEffect(() => {
-    loadImageUrl(imageData.name).then((value) => setImageSource(value));
-  }, [imageData.name]);
+    loadImageUrl(imageData.path).then((value) => setImageSource(value));
+  }, [imageData.path]);
 
   if (imageSource == null) {
     return <></>;
