@@ -1,7 +1,6 @@
 export interface ImageData {
-  image_index: number;
-  image_name: string;
-  image_base64: string;
+  index: number;
+  name: string;
   width: number;
   height: number;
 }

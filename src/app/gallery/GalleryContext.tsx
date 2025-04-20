@@ -62,7 +62,7 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
         if (newImages.length === 0) return;
 
         const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-        newImages.sort((a, b) => collator.compare(a.image_name, b.image_name));
+        newImages.sort((a, b) => collator.compare(a.name, b.name));
 
         setMedias((prev) => [...prev, ...newImages]);
         setCurrentBatch((prev) => prev + 1);

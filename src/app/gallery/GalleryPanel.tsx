@@ -3,7 +3,7 @@ import { MasonryView } from '@/app/gallery/views/MasonryView';
 import { GalleryProvider } from './GalleryContext';
 import { GridView } from './views/GridView';
 
-const DIRECTORY = 'C:\\dev\\PixelArk\\images100';
+export const DIRECTORY = 'C:\\dev\\PixelArk\\images100';
 
 export function GalleryPanel() {
   return (

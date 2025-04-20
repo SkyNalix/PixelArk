@@ -95,7 +95,7 @@ export function MasonryView(): ReactElement {
             }}
           >
             {columnItems.map(({ imageData, index }) => (
-              <GalleryElement key={index} index={index} data={imageData} />
+              <GalleryElement key={index} imageData={imageData} />
             ))}
           </div>
         ))}

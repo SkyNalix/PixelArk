@@ -18,7 +18,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "asset: http://asset.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
