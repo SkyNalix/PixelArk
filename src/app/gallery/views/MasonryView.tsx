@@ -1,70 +1,73 @@
-import { ReactElement, useEffect, useMemo, useState } from 'react';
+import { ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ImageData } from '@/app/gallery/types.ts';
 import { useInView } from 'react-intersection-observer';
 import { GalleryElement } from '../GalleryElement';
 import { useGallery } from '@/app/gallery/GalleryContext.tsx';
 
 const COLUMNS = 3;
+const COLUMNS_GAP = 8;
+
+type ColumnImageType = { imageData: ImageData; index: number };
 
 export function MasonryView(): ReactElement {
   const { medias, isCurrentlyLoading, currentDirectory, loadNextBatch } = useGallery();
 
-  const [columnAssignments, setColumnAssignments] = useState<number[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
 
-  // Setup intersection observer for bottom detection to load more images
-  const { ref: bottomObserverRef, inView: bottomInView } = useInView({
-    threshold: 0.1,
-    rootMargin: '200px 0px',
-  });
+  const columnWidth = containerWidth ? (containerWidth - COLUMNS_GAP * (COLUMNS - 1)) / COLUMNS : null;
 
-  // Calculate column assignments when images change
-  useEffect(() => {
-    const newAssignments: number[] = [];
-    const columnHeights = new Array(COLUMNS).fill(0);
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      const resizeObserver = new ResizeObserver(([entry]) => {
+        setContainerWidth(entry.contentRect.width);
+      });
 
-    medias.forEach((imageData, index) => {
-      // Find the shortest column
-      const shortestColumnIndex = columnHeights.reduce((shortestIndex, current, currentIndex) => {
-        return current < columnHeights[shortestIndex] ? currentIndex : shortestIndex;
-      }, 0);
+      resizeObserver.observe(containerRef.current);
 
-      // Assign image to the shortest column
-      newAssignments[index] = shortestColumnIndex;
-
-      // Update column height with estimated height
-      if (imageData) {
-        const aspectRatio = imageData.height / imageData.width;
-        const estimatedHeight = aspectRatio * (100 / COLUMNS);
-        columnHeights[shortestColumnIndex] += estimatedHeight;
-      }
-    });
-
-    setColumnAssignments(newAssignments);
-  }, [medias]);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
 
   // Create columns for horizontal layout
   const columns = useMemo(() => {
-    const cols = Array(COLUMNS)
-      .fill(null)
-      .map(() => [] as { imageData: ImageData; index: number }[]);
+    if (!columnWidth) {
+      // Just dump all images into the first column
+      const fallback: Array<Array<ColumnImageType>> = Array(COLUMNS)
+        .fill([])
+        .map(() => []);
+      medias.forEach((imageData, index) => {
+        fallback[0].push({ imageData, index });
+      });
+      return fallback;
+    }
 
+    const cols: Array<Array<ColumnImageType>> = Array(COLUMNS)
+      .fill([])
+      .map(() => []);
     const columnsSizes = Array(COLUMNS).fill(0);
 
-    // Distribute images based on stored assignments
     medias.forEach((imageData, index) => {
-      let columnIndex = columnAssignments[index];
-      if (columnIndex === undefined) {
-        columnIndex = columnsSizes.reduce((shortestIndex, current, currentIndex) => {
-          return current < columnsSizes[shortestIndex] ? currentIndex : shortestIndex;
-        }, 0);
-      }
-      columnsSizes[columnIndex] += imageData.height;
+      const scale = columnWidth / imageData.width;
+      const scaledHeight = imageData.height * scale;
 
+      const columnIndex = columnsSizes.reduce(
+        (shortestIndex, current, i, sizes) => (current < sizes[shortestIndex] ? i : shortestIndex),
+        0,
+      );
+
+      columnsSizes[columnIndex] += scaledHeight;
       cols[columnIndex].push({ imageData, index });
     });
 
     return cols;
-  }, [medias, columnAssignments]);
+  }, [medias, columnWidth]);
+
+  // intersection observer for bottom detection to load next batches
+  const { ref: bottomObserverRef, inView: bottomInView } = useInView({
+    threshold: 0.1,
+    rootMargin: '200px 0px',
+  });
 
   // Load next batch when bottom observer triggers
   useEffect(() => {
@@ -77,6 +80,7 @@ export function MasonryView(): ReactElement {
   return (
     <div>
       <div
+        ref={containerRef}
         style={{
           display: 'flex',
           flexDirection: 'row',
@@ -92,6 +96,7 @@ export function MasonryView(): ReactElement {
               flexDirection: 'column',
               flexGrow: 1,
               gap: '8px',
+              width: columnWidth ? `${columnWidth}px` : 'auto', // <- fixed width
             }}
           >
             {columnItems.map(({ imageData, index }) => (
@@ -101,7 +106,6 @@ export function MasonryView(): ReactElement {
         ))}
       </div>
 
-      {/* Bottom observer to detect when to load the next batch */}
       <div ref={bottomObserverRef}>{isCurrentlyLoading && <div>Loading...</div>}</div>
     </div>
   );

@@ -15,7 +15,9 @@ export function GalleryElement({ imageData }: GalleryElementProps): ReactElement
   const [imageSource, setImageSource] = useState<string | null>(null);
 
   useEffect(() => {
-    loadImageUrl(imageData.path).then((value) => setImageSource(value));
+    loadImageUrl(imageData.path)
+      .then((value) => setImageSource(value))
+      .catch((error) => console.error(error));
   }, [imageData.path]);
 
   if (imageSource == null) {
@@ -25,14 +27,14 @@ export function GalleryElement({ imageData }: GalleryElementProps): ReactElement
   return (
     <img
       src={imageSource}
-      alt={'preview'}
+      alt={imageData.name}
       loading="lazy"
       style={{
         width: '100%',
         height: 'auto',
-        objectFit: 'cover',
         borderRadius: '4px',
       }}
+      onError={() => console.error('Broken image:', imageData.path)}
     />
   );
 }
