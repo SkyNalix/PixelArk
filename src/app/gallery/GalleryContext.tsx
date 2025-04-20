@@ -60,9 +60,6 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
 
         if (newImages.length === 0) return;
 
-        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-        newImages.sort((a, b) => collator.compare(a.name, b.name));
-
         setMedias((prev) => [...prev, ...newImages]);
         setCurrentBatch((prev) => prev + 1);
       } catch (error) {
