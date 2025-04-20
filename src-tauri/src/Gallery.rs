@@ -7,6 +7,9 @@ use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use tauri::State;
+use crate::{get_project_path, ProjectPath};
 
 #[derive(Serialize)]
 pub struct ImageData {
@@ -29,8 +32,16 @@ fn get_cache(cache_dir: &PathBuf, file_name: &str) -> Option<PathBuf> {
 }
 
 #[tauri::command]
-pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> Result<Vec<ImageData>, String> {
-    let path = Path::new(&directory);
+pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<Vec<ImageData>, String> {
+    let timer = Instant::now();
+
+    let root_path = get_project_path(state);
+    if None == root_path {
+        return Err("Project path not defined".to_string());
+    }
+    let root_path = root_path.unwrap();
+
+    let path = root_path.join(&directory);
     let mut images = Vec::new();
 
     if !path.is_dir() {
@@ -67,8 +78,17 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> R
         return Ok(images); // Return empty if range is out of bounds
     }
 
-    let cache_dir = path.join(".cache");
+    let cache_dir = root_path.join(".cache").join(&directory);
     fs::create_dir_all(&cache_dir).ok(); // Make sure it exists
+
+    // Timers
+    let mut read_time = Duration::ZERO;
+    let mut open_time = Duration::ZERO;
+    let mut decode_time = Duration::ZERO;
+    let mut resize_time = Duration::ZERO;
+    let mut cache_time = Duration::ZERO;
+
+    let mut processed_count = 0;
 
     for (index, file_path) in image_files
         .iter()
@@ -96,26 +116,34 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> R
                     width,
                     height,
                 });
+                processed_count += 1;
                 continue;
             }
         }
 
+        let start = Instant::now();
         let mut buffer = Vec::new();
         if file.read_to_end(&mut buffer).is_err() {
             continue;
         }
+        read_time += start.elapsed();
 
         // reading image
+        let start = Instant::now();
         let reader = match ImageReader::new(Cursor::new(&buffer)).with_guessed_format() {
             Ok(r) => r,
             Err(_) => continue,
         };
+        open_time += start.elapsed();
+        let start = Instant::now();
         let img = match reader.decode() {
             Ok(i) => i,
             Err(_) => continue,
         };
+        decode_time += start.elapsed();
 
         // resizing image
+        let start = Instant::now();
         let width = img.width();
         let height = img.height();
         let resized = img.resize(
@@ -123,9 +151,12 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> R
             (height as f32 * 0.2) as u32,
             FilterType::Nearest,
         );
+        resize_time = start.elapsed();
 
         // saving image to cache folder
+        let start = Instant::now();
         resized.save(cache_dir.join(&file_name)).ok();
+        cache_time += start.elapsed();
 
         images.push(ImageData {
             index: index as i32,
@@ -133,19 +164,34 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32) -> R
             width,
             height,
         });
+
+        processed_count += 1;
     }
 
+    // Print average times
+    if processed_count > 0 {
+        println!("Processed count:     {:?}", processed_count);
+        println!("Average read_time:   {:?}", read_time / processed_count);
+        println!("Average open_time:   {:?}", open_time / processed_count);
+        println!("Average decode_time: {:?}", decode_time / processed_count);
+        println!("Average resize_time: {:?}", resize_time / processed_count);
+        println!("Average cache_time: {:?}", cache_time / processed_count);
+    } else {
+        println!("No files were processed.");
+    }
+
+    println!("Total time: {:?}", timer.elapsed());
     Ok(images)
 }
 
 #[tauri::command]
-pub fn get_image_path(directory: String, file_name: String) -> Result<String, String> {
-    let path = Path::new(&directory);
-    if !path.is_dir() {
-        return Err(format!("Invalid directory: {}", directory));
+pub fn get_image_path(file_name: String, state: State<ProjectPath>) -> Result<String, String> {
+    let root_path = get_project_path(state);
+    if None == root_path {
+        return Err("Project path not defined".to_string());
     }
 
-    let image_path = path.join(".cache").join(file_name);
+    let image_path = root_path.unwrap().join(".cache").join(file_name);
     if image_path.exists() {
         Ok(image_path.to_string_lossy().into())
     } else {
@@ -154,8 +200,13 @@ pub fn get_image_path(directory: String, file_name: String) -> Result<String, St
 }
 
 #[tauri::command]
-pub fn get_folder_names(directory: &str) -> Result<Vec<String>, String> {
-    let path = Path::new(directory);
+pub fn get_folder_names(directory: &str, state: State<ProjectPath>) -> Result<Vec<String>, String> {
+    let root_path = get_project_path(state);
+    if None == root_path {
+        return Err("Project path not defined".to_string());
+    }
+
+    let path = root_path.unwrap().join(Path::new(directory));
 
     if !path.is_dir() {
         return Err(format!("Path is not a directory: {}", directory));

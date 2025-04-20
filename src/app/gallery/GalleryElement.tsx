@@ -1,10 +1,9 @@
 import { ImageData } from '@/app/gallery/types.ts';
 import { ReactElement, useEffect, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { DIRECTORY } from '@/app/gallery/GalleryPanel.tsx';
 
 async function loadImageUrl(fileName: string) {
-  const path = await invoke<string>('get_image_path', { directory: DIRECTORY, fileName });
+  const path = await invoke<string>('get_image_path', { fileName });
   return convertFileSrc(path); // converts to file:// url usable in <img>
 }
 

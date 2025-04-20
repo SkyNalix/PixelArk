@@ -26,11 +26,10 @@ interface GalleryContextType {
 const GalleryContext = createContext<GalleryContextType | null>(null);
 
 interface GalleryProviderProps {
-  rootPath: string;
   children: ReactNode;
 }
 
-export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
+export function GalleryProvider({ children }: GalleryProviderProps) {
   const [currentDirectory, setCurrentDirectory] = useState<string[]>([]);
   const [medias, setMedias] = useState<ImageData[]>([]);
   const [isCurrentlyLoading, setIsCurrentlyLoading] = useState(false);
@@ -39,13 +38,13 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
   const [folderNames, setFolderNames] = useState<string[]>([]);
 
   useEffect(() => {
-    invoke<string[]>('get_folder_names', { directory: `${rootPath}/${currentDirectory.join('/')}` })
+    invoke<string[]>('get_folder_names', { directory: currentDirectory.join('/') })
       .then((names) => setFolderNames(names))
       .catch((error) => {
         console.error('Failed to get folder names:', error);
         setFolderNames([]);
       });
-  }, [currentDirectory, rootPath]);
+  }, [currentDirectory]);
 
   // Function to load a specific batch of images
   const loadBatchImages = useCallback(
@@ -54,7 +53,7 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
 
       try {
         const newImages = await invoke<ImageData[]>('load_images_from_directory', {
-          directory: `${rootPath}/${currentDirectory.join('/')}`,
+          directory: currentDirectory.join('/'),
           start,
           stop,
         });
@@ -72,7 +71,7 @@ export function GalleryProvider({ rootPath, children }: GalleryProviderProps) {
         setIsCurrentlyLoading(false);
       }
     },
-    [currentDirectory, rootPath],
+    [currentDirectory],
   );
 
   // Check if batch is already loaded

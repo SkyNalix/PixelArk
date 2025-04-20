@@ -3,11 +3,9 @@ import { MasonryView } from '@/app/gallery/views/MasonryView';
 import { GalleryProvider } from './GalleryContext';
 import { GridView } from './views/GridView';
 
-export const DIRECTORY = 'C:\\dev\\PixelArk\\images100';
-
 export function GalleryPanel() {
   return (
-    <GalleryProvider rootPath={DIRECTORY}>
+    <GalleryProvider>
       <div
         style={{
           width: '100%',
