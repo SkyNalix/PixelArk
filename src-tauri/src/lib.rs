@@ -23,6 +23,7 @@ pub fn run() {
     let default_path = Some(Path::new("C:\\dev\\PixelArk\\images100").to_path_buf());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
         .manage(ProjectPath(Mutex::new(default_path)))
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
