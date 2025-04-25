@@ -69,7 +69,6 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         return Ok(images);
     }
 
-
     let root_path = match get_project_path(state) {
         Some(path) => path,
         None => return Err("Project path not defined".to_string()),
@@ -162,7 +161,6 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                         width,
                         height,
                     });
-                    processed_count += 1;
                     continue;
                 }
             }

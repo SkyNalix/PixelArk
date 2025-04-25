@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ImageData } from './types';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -9,7 +9,6 @@ interface GalleryContextType {
   medias: ImageData[];
   isCurrentlyLoading: boolean;
   totalImagesCount: number | null;
-  currentBatch: number;
   folderNames: string[];
   currentDirectory: string[];
 
@@ -19,7 +18,6 @@ interface GalleryContextType {
   setMedias: React.Dispatch<React.SetStateAction<ImageData[]>>;
   setIsCurrentlyLoading: React.Dispatch<React.SetStateAction<boolean>>;
   setTotalImagesCount: React.Dispatch<React.SetStateAction<number | null>>;
-  setCurrentBatch: React.Dispatch<React.SetStateAction<number>>;
   setCurrentDirectory: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
@@ -30,11 +28,13 @@ interface GalleryProviderProps {
 }
 
 export function GalleryProvider({ children }: GalleryProviderProps) {
+  const currentBatch = useRef(0);
+  const lastBatchLoadCall = useRef<number | null>(null);
+
   const [currentDirectory, setCurrentDirectory] = useState<string[]>([]);
   const [medias, setMedias] = useState<ImageData[]>([]);
   const [isCurrentlyLoading, setIsCurrentlyLoading] = useState(false);
   const [totalImagesCount, setTotalImagesCount] = useState<number | null>(null);
-  const [currentBatch, setCurrentBatch] = useState(0);
   const [folderNames, setFolderNames] = useState<string[]>([]);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
         if (newImages.length === 0) return;
 
         setMedias((prev) => [...prev, ...newImages]);
-        setCurrentBatch((prev) => prev + 1);
+        currentBatch.current += 1;
       } catch (error) {
         console.error(error);
       } finally {
@@ -81,13 +81,13 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
 
   // Load next batch of images when scrolling down
   const loadNextBatch = useCallback(() => {
-    if (isCurrentlyLoading) return;
+    if (isCurrentlyLoading || lastBatchLoadCall.current == currentBatch.current) return;
 
-    const startIndex = currentBatch * BATCH_SIZE;
+    const startIndex = currentBatch.current * BATCH_SIZE;
     const endIndex = startIndex + BATCH_SIZE;
 
     if (isBatchLoaded(startIndex, endIndex)) return;
-
+    lastBatchLoadCall.current = currentBatch.current;
     loadBatchImages(startIndex, endIndex);
   }, [currentBatch, isCurrentlyLoading, loadBatchImages, isBatchLoaded]);
 
@@ -96,7 +96,7 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
     setMedias([]);
     setIsCurrentlyLoading(false);
     setTotalImagesCount(null);
-    setCurrentBatch(0);
+    currentBatch.current = 0;
   }, [currentDirectory]);
 
   const value = {
@@ -104,7 +104,6 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
     medias,
     isCurrentlyLoading,
     totalImagesCount,
-    currentBatch,
     folderNames,
     currentDirectory,
     // Methods
@@ -113,7 +112,6 @@ export function GalleryProvider({ children }: GalleryProviderProps) {
     setMedias,
     setIsCurrentlyLoading,
     setTotalImagesCount,
-    setCurrentBatch,
     setCurrentDirectory,
   };
 

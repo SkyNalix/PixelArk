@@ -1,6 +1,15 @@
 import { GalleryPanel } from '@/app/gallery/GalleryPanel.tsx';
+import { attachConsole } from '@tauri-apps/plugin-log';
+import { useEffect } from 'react';
 
 function Home() {
+  useEffect(() => {
+    const connection = attachConsole();
+    return () => {
+      connection.then((fn) => fn()); // clean up
+    };
+  });
+
   return (
     <div
       style={{
