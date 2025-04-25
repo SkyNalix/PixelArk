@@ -1,17 +1,29 @@
-import { ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ImageData } from '@/app/gallery/types.ts';
+import { ReactElement, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 import { useInView } from 'react-intersection-observer';
-import { GalleryElement } from '../GalleryElement';
-import { useGallery } from '@/app/gallery/GalleryContext.tsx';
 
 const COLUMNS = 3;
 const COLUMNS_GAP = 8;
 
-type ColumnImageType = { imageData: ImageData; index: number };
+type ColumnItemType<T> = {
+  item: T;
+  index: number;
+};
 
-export function MasonryView(): ReactElement {
-  const { medias, isCurrentlyLoading, currentDirectory, loadNextBatch } = useGallery();
+type MasonryViewProps<T> = {
+  items: T[];
+  getSize: (item: T) => { width: number; height: number };
+  renderItem: (item: T, index: number) => ReactElement;
+  isCurrentlyLoading: boolean;
+  loadNextBatch: () => void;
+};
 
+export function MasonryView<T>({
+  items,
+  getSize,
+  renderItem,
+  isCurrentlyLoading,
+  loadNextBatch,
+}: MasonryViewProps<T>): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
 
@@ -32,50 +44,44 @@ export function MasonryView(): ReactElement {
   // Create columns for horizontal layout
   const columns = useMemo(() => {
     if (!columnWidth) {
-      // Just dump all images into the first column
-      const fallback: Array<Array<ColumnImageType>> = Array(COLUMNS)
-        .fill([])
-        .map(() => []);
-      medias.forEach((imageData, index) => {
-        fallback[0].push({ imageData, index });
+      const fallback: Array<Array<ColumnItemType<T>>> = Array.from({ length: COLUMNS }, () => []);
+      items.forEach((item, index) => {
+        fallback[0].push({ item, index });
       });
       return fallback;
     }
 
-    const cols: Array<Array<ColumnImageType>> = Array(COLUMNS)
-      .fill([])
-      .map(() => []);
-    const columnsSizes = Array(COLUMNS).fill(0);
+    const cols: Array<Array<ColumnItemType<T>>> = Array.from({ length: COLUMNS }, () => []);
+    const columnsHeights = Array(COLUMNS).fill(0);
 
-    medias.forEach((imageData, index) => {
-      const scale = columnWidth / imageData.width;
-      const scaledHeight = imageData.height * scale;
+    items.forEach((item, index) => {
+      const size = getSize(item);
+      const scale = columnWidth / size.width;
+      const scaledHeight = size.height * scale;
 
-      const columnIndex = columnsSizes.reduce(
-        (shortestIndex, current, i, sizes) => (current < sizes[shortestIndex] ? i : shortestIndex),
+      const columnIndex = columnsHeights.reduce(
+        (minIndex, height, i, arr) => (height < arr[minIndex] ? i : minIndex),
         0,
       );
 
-      columnsSizes[columnIndex] += scaledHeight;
-      cols[columnIndex].push({ imageData, index });
+      columnsHeights[columnIndex] += scaledHeight;
+      cols[columnIndex].push({ item, index });
     });
 
     return cols;
-  }, [medias, columnWidth]);
+  }, [items, columnWidth, getSize]);
 
-  // intersection observer for bottom detection to load next batches
+  // Intersection observer for loading next batch
   const { ref: bottomObserverRef, inView: bottomInView } = useInView({
     threshold: 0.1,
     rootMargin: '200px 0px',
   });
 
-  // Load next batch when bottom observer triggers
   useEffect(() => {
     if (bottomInView && !isCurrentlyLoading) {
       loadNextBatch();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bottomInView, currentDirectory]);
+  }, [bottomInView, isCurrentlyLoading, loadNextBatch]);
 
   return (
     <div>
@@ -85,7 +91,7 @@ export function MasonryView(): ReactElement {
           display: 'flex',
           flexDirection: 'row',
           width: '100%',
-          gap: '8px',
+          gap: `${COLUMNS_GAP}px`,
         }}
       >
         {columns.map((columnItems, columnIndex) => (
@@ -95,17 +101,18 @@ export function MasonryView(): ReactElement {
               display: 'flex',
               flexDirection: 'column',
               flexGrow: 1,
-              gap: '8px',
-              width: columnWidth ? `${columnWidth}px` : 'auto', // <- fixed width
+              gap: `${COLUMNS_GAP}px`,
+              width: columnWidth ? `${columnWidth}px` : 'auto',
             }}
           >
-            {columnItems.map(({ imageData, index }) => (
-              <GalleryElement key={index} imageData={imageData} />
+            {columnItems.map(({ item, index }) => (
+              <div key={index}>{renderItem(item, index)}</div>
             ))}
           </div>
         ))}
       </div>
 
+      {/* Intersection observer for bottom of container */}
       <div ref={bottomObserverRef}>{isCurrentlyLoading && <div>Loading...</div>}</div>
     </div>
   );

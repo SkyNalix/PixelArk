@@ -1,7 +1,7 @@
 import { GalleryHeader } from '@/app/gallery/GalleryHeader.tsx';
-import { MasonryView } from '@/app/gallery/views/MasonryView';
 import { GalleryProvider } from './GalleryContext';
-import { GridView } from './views/GridView';
+import { GalleryElementsView } from '@/app/gallery/GalleryElementsView.tsx';
+import { GalleryFoldersView } from '@/app/gallery/GalleryFoldersView.tsx';
 
 export function GalleryPanel() {
   return (
@@ -31,8 +31,8 @@ export function GalleryPanel() {
             paddingTop: '8px',
           }}
         >
-          <GridView />
-          <MasonryView />
+          <GalleryFoldersView />
+          <GalleryElementsView />
         </div>
       </div>
     </GalleryProvider>

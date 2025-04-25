@@ -1,27 +1,12 @@
-import { ReactElement, useCallback, useRef } from 'react';
-import { GalleryFolder } from '../GalleryFolder';
-import { useGallery } from '@/app/gallery/GalleryContext.tsx';
+import { ReactElement } from 'react';
 
-export function GridView(): ReactElement {
-  const { folderNames, setCurrentDirectory } = useGallery();
+type GridViewProps<T> = {
+  items: T[];
+  renderItem: (item: T, index: number) => ReactElement;
+};
 
-  const isClickLocked = useRef(false);
-
-  const onFolderClick = useCallback(
-    (folderName: string) => {
-      if (isClickLocked.current) return;
-
-      isClickLocked.current = true;
-      setCurrentDirectory((currentDirectory) => [...currentDirectory, folderName]);
-
-      setTimeout(() => {
-        isClickLocked.current = false;
-      }, 300); // adjust timing as needed
-    },
-    [setCurrentDirectory],
-  );
-
-  if (folderNames.length === 0) {
+export function GridView<T>({ items, renderItem }: GridViewProps<T>): ReactElement {
+  if (items.length === 0) {
     return <></>;
   }
 
@@ -36,10 +21,8 @@ export function GridView(): ReactElement {
         paddingBottom: '20px',
       }}
     >
-      {folderNames.map((folderName, index) => (
-        <div key={index}>
-          <GalleryFolder folderName={folderName} onClick={onFolderClick} />
-        </div>
+      {items.map((item, index) => (
+        <div key={index}>{renderItem(item, index)}</div>
       ))}
     </div>
   );
