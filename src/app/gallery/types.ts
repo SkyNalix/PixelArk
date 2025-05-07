@@ -1,4 +1,4 @@
-export interface ImageData {
+export interface ImageElementData {
   name: string;
   path: string;
   width: number;

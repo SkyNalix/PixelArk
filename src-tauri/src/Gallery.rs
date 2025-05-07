@@ -13,11 +13,17 @@ use tauri::State;
 use crate::{get_project_path, ProjectPath};
 
 #[derive(Serialize)]
-pub struct ImageData {
+pub struct ImageElementData {
     name: String,
     path: String,
     width: u32,
     height: u32,
+}
+
+#[derive(Serialize)]
+pub struct LoadImagesResponse {
+    medias: Vec<ImageElementData>,
+    no_more_batches: bool,
 }
 
 pub fn load_cache_set(cache_dir: &PathBuf) -> HashSet<PathBuf> {
@@ -56,8 +62,8 @@ fn find_cached_file<'a>(file_name: &str, cache_set: &'a HashSet<PathBuf>) -> Opt
     })
 }
 
-#[tauri::command]
-pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<Vec<ImageData>, String> {
+#[tauri::command(async)]
+pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<LoadImagesResponse, String> {
     let timer = Instant::now();
 
     let mut images = Vec::new();
@@ -65,8 +71,8 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
     let range_stop = stop.max(0) as usize;
 
     if range_start > range_stop {
-        log::error!("Illegal batch loading start {} and stop {} indeses", start, stop);
-        return Ok(images);
+        log::error!("Illegal batch loading start {} and stop {} indexes", start, stop);
+        return Ok(LoadImagesResponse { medias: images, no_more_batches: false});
     }
 
     let root_path = match get_project_path(state) {
@@ -103,7 +109,7 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
     image_files.sort_by(|a, b| compare(&a.to_string_lossy(), &b.to_string_lossy()));
 
     if range_start >= image_files.len() {
-        return Ok(images); // Return empty if range is out of bounds
+        return Ok(LoadImagesResponse { medias: images, no_more_batches: true}); // Return empty if the range is out of bounds
     }
 
     let cache_dir = root_path.join(".cache").join(&directory);
@@ -111,7 +117,7 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
     if cache_dir.exists() {
         cached_images = load_cache_set(&cache_dir);
     } else {
-        if let Err(e) = fs::create_dir(&cache_dir) {
+        if let Err(e) = fs::create_dir_all(&cache_dir) {
             log::error!("Failed to create cache directory: {:?}", e);
         }
         cached_images= HashSet::new()
@@ -131,7 +137,6 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         .skip(range_start)
         .take(range_stop.saturating_sub(range_start))
     {
-        let file_path = full_path.strip_prefix(&root_path).ok().unwrap();
 
         let mut file = match File::open(full_path) {
             Ok(f) => f,
@@ -155,9 +160,11 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                     log::error!("Failed to get image dimensions of cached image {}: {:?}", cache_img_path.display(), e);
                 },
                 Ok((width, height)) => {
-                    images.push(ImageData {
+                    let path = cache_img_path.to_string_lossy().to_string();
+                    println!("{}", path);
+                    images.push(ImageElementData {
                         name: file_name,
-                        path: file_path.to_string_lossy().to_string(),
+                        path: format!("http://asset.localhost/{}", path),
                         width,
                         height,
                     });
@@ -205,16 +212,17 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         );
         resize_time = start.elapsed();
 
-        // saving image to cache folder
+        // saving image to the cache folder
         let start = Instant::now();
-        if let Err(e) = resized.save(cache_dir.join(&file_name)) {
+        let cache_path = cache_dir.join(&file_name);
+        if let Err(e) = resized.save(&cache_path) {
             log::error!("Failed to save image to cache: {:?}", e);
         }
         cache_time += start.elapsed();
 
-        images.push(ImageData {
+        images.push(ImageElementData {
             name: file_name,
-            path: file_path.to_string_lossy().to_string(),
+            path: format!("http://asset.localhost/{}", cache_path.to_string_lossy().to_string()),
             width,
             height,
         });
@@ -224,34 +232,15 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
 
     // Print average times
     if processed_count > 0 {
-        log::info!("                        ");
-        log::info!("Processed count:     {:?}", processed_count);
-        log::info!("Average read_time:   {:?}", read_time / processed_count);
-        log::info!("Average open_time:   {:?}", open_time / processed_count);
-        log::info!("Average decode_time: {:?}", decode_time / processed_count);
-        log::info!("Average resize_time: {:?}", resize_time / processed_count);
-        log::info!("Average cache_time: {:?}", cache_time / processed_count);
-    } else {
-        log::info!("No files were processed.");
+        log::info!("\nProcessed count:       {:?}", processed_count);
+        log::info!("Average read_time:     {:?}", read_time / processed_count);
+        log::info!("Average open_time:     {:?}", open_time / processed_count);
+        log::info!("Average decode_time:   {:?}", decode_time / processed_count);
+        log::info!("Average resize_time:   {:?}", resize_time / processed_count);
+        log::info!("Average cache_time:    {:?}", cache_time / processed_count);
     }
-
     log::info!("Total batch load time: {:?}", timer.elapsed());
-    Ok(images)
-}
-
-#[tauri::command]
-pub fn get_image_path(file_path: String, state: State<ProjectPath>) -> Result<String, String> {
-    let root_path = match get_project_path(state) {
-        Some(path) => path,
-        None => return Err("Project path not defined".to_string()),
-    };
-
-    let file_path = root_path.join(".cache").join(file_path);
-    if file_path.exists() {
-        Ok(file_path.to_string_lossy().into())
-    } else {
-        Err("Image not found".into())
-    }
+    Ok(LoadImagesResponse { medias: images, no_more_batches: range_stop >= image_files.len() })
 }
 
 #[tauri::command]

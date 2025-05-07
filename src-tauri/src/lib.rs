@@ -46,8 +46,7 @@ pub fn run() {
             set_project_path,
             get_project_path,
             gallery::load_images_from_directory,
-            gallery::get_folder_names,
-            gallery::get_image_path
+            gallery::get_folder_names
             ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

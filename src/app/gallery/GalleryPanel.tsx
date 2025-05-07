@@ -1,5 +1,5 @@
 import { GalleryHeader } from '@/app/gallery/GalleryHeader.tsx';
-import { GalleryProvider } from './GalleryContext';
+import { GalleryProvider } from './context/GalleryProvider.tsx';
 import { GalleryElementsView } from '@/app/gallery/GalleryElementsView.tsx';
 import { GalleryFoldersView } from '@/app/gallery/GalleryFoldersView.tsx';
 

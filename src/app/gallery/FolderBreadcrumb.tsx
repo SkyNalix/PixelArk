@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, RefObject, CSSProperties } from 'react';
-import { useGallery } from '@/app/gallery/GalleryContext.tsx';
+import { useGallery } from '@/app/gallery/context/useGallery.ts';
 import { ChevronRight } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 

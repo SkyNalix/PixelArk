@@ -1,5 +1,5 @@
 import { MasonryView } from './views/MasonryView';
-import { useGallery } from '@/app/gallery/GalleryContext.tsx';
+import { useGallery } from '@/app/gallery/context/useGallery.ts';
 import { GalleryElement } from '@/app/gallery/elements/GalleryElement.tsx';
 
 export function GalleryElementsView() {
@@ -9,7 +9,7 @@ export function GalleryElementsView() {
     <MasonryView
       items={medias}
       getSize={(img) => ({ width: img.width, height: img.height })}
-      renderItem={(img) => <GalleryElement imageData={img} />}
+      renderItem={(img) => <GalleryElement imageElementData={img} />}
       isCurrentlyLoading={isCurrentlyLoading}
       loadNextBatch={loadNextBatch}
     />

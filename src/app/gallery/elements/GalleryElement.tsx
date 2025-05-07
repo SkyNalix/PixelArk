@@ -1,40 +1,22 @@
-import { ImageData } from '@/app/gallery/types.ts';
-import { ReactElement, useEffect, useState } from 'react';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-
-async function loadImageUrl(filePath: string) {
-  const path = await invoke<string>('get_image_path', { filePath: filePath });
-  return convertFileSrc(path); // converts to file:// url usable in <img>
-}
+import { ImageElementData } from '@/app/gallery/types.ts';
+import { ReactElement } from 'react';
 
 export type GalleryElementProps = {
-  imageData: ImageData;
+  imageElementData: ImageElementData;
 };
 
-export function GalleryElement({ imageData }: GalleryElementProps): ReactElement {
-  const [imageSource, setImageSource] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadImageUrl(imageData.path)
-      .then((value) => setImageSource(value))
-      .catch((error) => console.error(error));
-  }, [imageData.path]);
-
-  if (imageSource == null) {
-    return <></>;
-  }
-
+export function GalleryElement({ imageElementData }: GalleryElementProps): ReactElement {
   return (
     <img
-      src={imageSource}
-      alt={imageData.name}
+      src={imageElementData.path}
+      alt={imageElementData.name}
       loading="lazy"
       style={{
         width: '100%',
         height: 'auto',
         borderRadius: '4px',
       }}
-      onError={() => console.error('Broken image:', imageData.path)}
+      onError={() => console.error('Broken image:', imageElementData.path)}
     />
   );
 }
