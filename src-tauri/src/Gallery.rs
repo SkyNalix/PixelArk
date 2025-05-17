@@ -14,8 +14,10 @@ use crate::{get_project_path, ProjectPath};
 
 #[derive(Serialize)]
 pub struct ImageElementData {
+    index: u32,
     name: String,
     path: String,
+    thumbnail_path: String,
     width: u32,
     height: u32,
 }
@@ -132,8 +134,9 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
 
     let mut processed_count = 0;
 
-    for full_path in image_files
+    for (index, full_path) in image_files
         .iter()
+        .enumerate()
         .skip(range_start)
         .take(range_stop.saturating_sub(range_start))
     {
@@ -160,11 +163,11 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                     log::error!("Failed to get image dimensions of cached image {}: {:?}", cache_img_path.display(), e);
                 },
                 Ok((width, height)) => {
-                    let path = cache_img_path.to_string_lossy().to_string();
-                    println!("{}", path);
                     images.push(ImageElementData {
+                        index: index as u32,
                         name: file_name,
-                        path: format!("http://asset.localhost/{}", path),
+                        path: format!("http://asset.localhost/{}", full_path.to_string_lossy().to_string()),
+                        thumbnail_path: format!("http://asset.localhost/{}", cache_img_path.to_string_lossy().to_string()),
                         width,
                         height,
                     });
@@ -221,8 +224,10 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         cache_time += start.elapsed();
 
         images.push(ImageElementData {
+            index: index as u32,
             name: file_name,
-            path: format!("http://asset.localhost/{}", cache_path.to_string_lossy().to_string()),
+            path: format!("http://asset.localhost/{}", full_path.to_string_lossy().to_string()),
+            thumbnail_path: format!("http://asset.localhost/{}", cache_path.to_string_lossy().to_string()),
             width,
             height,
         });

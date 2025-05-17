@@ -1,11 +1,17 @@
 import { GalleryHeader } from '@/app/gallery/GalleryHeader.tsx';
-import { GalleryProvider } from './context/GalleryProvider.tsx';
+import { GalleryProvider } from '@/app/gallery/galleryContext/GalleryProvider.tsx';
 import { GalleryElementsView } from '@/app/gallery/GalleryElementsView.tsx';
 import { GalleryFoldersView } from '@/app/gallery/GalleryFoldersView.tsx';
+import { MediaViewerProvider } from '@/app/gallery/mediaViewer/mediaViewerContext/MediaViewerProvider.tsx';
+import { useGallery } from '@/app/gallery/galleryContext/useGallery.ts';
+import { MediaViewerPanel } from '@/app/gallery/mediaViewer/MediaViewerPanel.tsx';
+import { useMediaViewer } from '@/app/gallery/mediaViewer/mediaViewerContext/useMediaViewer.ts';
 
-export function GalleryPanel() {
+function GalleryPanelInternal() {
+  const { currentMedia } = useMediaViewer();
+
   return (
-    <GalleryProvider>
+    <>
       <div
         style={{
           width: '100%',
@@ -35,6 +41,24 @@ export function GalleryPanel() {
           <GalleryElementsView />
         </div>
       </div>
+      {currentMedia && <MediaViewerPanel />}
+    </>
+  );
+}
+
+function GalleryPanelWithProvider() {
+  const { medias } = useGallery();
+  return (
+    <MediaViewerProvider medias={medias}>
+      <GalleryPanelInternal />
+    </MediaViewerProvider>
+  );
+}
+
+export function GalleryPanel() {
+  return (
+    <GalleryProvider>
+      <GalleryPanelWithProvider />
     </GalleryProvider>
   );
 }

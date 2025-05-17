@@ -6,14 +6,12 @@ import { GalleryContext } from './GalleryContext';
 const BATCH_SIZE = 30;
 
 export interface GalleryContextType {
-  // States
   medias: ImageElementData[];
   isCurrentlyLoading: boolean;
   noMoreBatches: boolean;
   folderNames: string[];
   currentDirectory: string[];
 
-  // Methods
   loadNextBatch: () => void;
   setCurrentDirectory: Dispatch<SetStateAction<string[]>>;
 }

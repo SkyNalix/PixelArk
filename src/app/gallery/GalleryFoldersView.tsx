@@ -1,7 +1,7 @@
 import { GridView } from '@/app/gallery/views/GridView.tsx';
 import { GalleryFolder } from '@/app/gallery/elements/GalleryFolder.tsx';
 import { useCallback, useRef } from 'react';
-import { useGallery } from '@/app/gallery/context/useGallery.ts';
+import { useGallery } from '@/app/gallery/galleryContext/useGallery.ts';
 
 export function GalleryFoldersView() {
   const { folderNames, setCurrentDirectory } = useGallery();

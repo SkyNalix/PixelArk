@@ -1,5 +1,5 @@
 import { MasonryView } from './views/MasonryView';
-import { useGallery } from '@/app/gallery/context/useGallery.ts';
+import { useGallery } from '@/app/gallery/galleryContext/useGallery.ts';
 import { GalleryElement } from '@/app/gallery/elements/GalleryElement.tsx';
 
 export function GalleryElementsView() {
