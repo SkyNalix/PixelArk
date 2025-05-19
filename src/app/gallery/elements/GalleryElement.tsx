@@ -10,7 +10,6 @@ export function GalleryElement({ imageElementData }: GalleryElementProps): React
   const { setCurrentMedia } = useMediaViewer();
 
   const clickAction = useCallback(() => {
-    console.log('Clicked on image:', imageElementData.path);
     setCurrentMedia(imageElementData);
   }, [imageElementData, setCurrentMedia]);
 

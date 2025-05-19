@@ -33,7 +33,7 @@ export function MediaViewerPanel() {
   return (
     <div
       style={{
-        position: 'absolute',
+        position: 'fixed',
         height: '100%',
         width: '100%',
         top: 0,
