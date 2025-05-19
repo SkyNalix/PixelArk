@@ -1,17 +1,11 @@
-use std::cmp::Ordering::Equal;
-use mozjpeg::ColorSpace;
 use std::collections::HashSet;
-use image::imageops::FilterType;
-use image::{ImageReader, ImageResult};
 use natord::compare;
 use serde::Serialize;
 use std::fs;
 use std::fs::File;
-use std::io::{BufWriter, Cursor, Error, Write};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-use image::codecs::jpeg::JpegEncoder;
+use std::time::Instant;
 use tauri::State;
 use crate::{get_project_path, ProjectPath};
 
@@ -23,6 +17,21 @@ pub struct ImageElementData {
     thumbnail_path: String,
     width: u32,
     height: u32,
+}
+
+#[derive(PartialEq)]
+pub enum MediaType {
+    JPG,
+    PNG
+}
+
+pub fn get_media_type(path: &PathBuf) -> Option<MediaType> {
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_lowercase();
+    match extension.as_str() {
+        "jpg" | "jpeg" => Some(MediaType::JPG),
+        "png" => Some(MediaType::PNG),
+        _ => None,
+    }
 }
 
 #[derive(Serialize)]
@@ -67,9 +76,61 @@ fn find_cached_file<'a>(file_name: &str, cache_set: &'a HashSet<PathBuf>) -> Opt
     })
 }
 
+fn read_media_file(media_path: &PathBuf) -> Result<Vec<u8>, String>{
+    let mut media_file = File::open(media_path).map_err(|e| format!("Failed open image file: {:?}", e.to_string()))?;
+        
+    let mut buffer = Vec::new();
+    media_file.read_to_end(&mut buffer).map_err(|e| format!("Failed to read image file: {:?}", e.to_string()))?;
+    Ok(buffer)
+}
+
+fn decompress_and_scale_jpeg_image(media_buffer: Vec<u8>, scaling: turbojpeg::ScalingFactor) -> Result<turbojpeg::Image<Vec<u8>>, String>{
+    let mut decompressor = turbojpeg::Decompressor::new().map_err(|e| format!("Failed to create decompressor: {:?}", e))?;
+    decompressor.set_scaling_factor(scaling).map_err(|e| format!("Failed to set scaling factor: {:?}", e))?;
+    
+    let scaled_header = decompressor.read_header(&media_buffer).map_err(|e| e.to_string())?.scaled(scaling);
+    let (width, height) = (scaled_header.width, scaled_header.height);
+    let mut image = turbojpeg::Image {
+        pixels: vec![0u8; width * height * 3],
+        width,
+        pitch: 3 * width, // size of one image row in memory
+        height,
+        format: turbojpeg::PixelFormat::RGB,
+    };
+    decompressor.decompress(&media_buffer, image.as_deref_mut()).map_err(|e| format!("Failed to decompress the jpeg image: {:?}", e))?;
+    Ok(image)
+}
+
+fn compress_jpeg_image(image: &turbojpeg::Image<Vec<u8>>) -> Result<turbojpeg::OutputBuf, String> {
+    let mut compressor = turbojpeg::Compressor::new().map_err(|e| format!("Failed to create compressor: {:?}", e))?;
+    compressor.set_quality(50).map_err(|e| format!("Failed to set JPEG quality: {:?}", e))?;
+    compressor.set_subsamp(turbojpeg::Subsamp::Sub2x2).map_err(|e| format!("Failed to set JPEG subsampling: {:?}", e))?;
+    let mut compressed_image_buffer = turbojpeg::OutputBuf::new_owned();
+    compressor.compress(image.as_deref(), &mut compressed_image_buffer).map_err(|e| format!("Failed to compress JPEG: {:?}", e))?;
+    Ok(compressed_image_buffer)
+}
+
+fn save_media_thumbnail(cache_directory: &PathBuf, file_name: String, thumbnail_buffer: turbojpeg::OutputBuf) -> Result<(), String> {
+    let thumbnail_path = cache_directory.join(file_name);
+    fs::write(&thumbnail_path, &thumbnail_buffer).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
+    Ok(())
+}
+
+fn cache_media_thumbnail(media_path: &PathBuf, cache_directory: &PathBuf) -> Result<(PathBuf, u32, u32), String> {
+    let media_buffer = read_media_file(media_path)?;
+    let image = decompress_and_scale_jpeg_image(media_buffer, turbojpeg::ScalingFactor::ONE_EIGHTH)?;
+    
+    let file_name = media_path.file_name().unwrap().to_str().unwrap().to_string();
+    let thumbnail_buffer = compress_jpeg_image(&image)?;
+    save_media_thumbnail(cache_directory, file_name, thumbnail_buffer)?;
+    Ok((PathBuf::from(""), 0, 0))
+}
+
 #[tauri::command(async)]
 pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<LoadImagesResponse, String> {
+    // debug variables
     let timer = Instant::now();
+    let mut processed_count = 0;
 
     let disable_cache = true;
     let asset_prefix = "http://asset.localhost/";
@@ -97,77 +158,51 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
     let read_dir = fs::read_dir(path).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     // Collect and filter image files
-    let mut media_files: Vec<PathBuf> = read_dir
+    let mut media_files: Vec<(PathBuf, MediaType)> = read_dir
         .filter_map(|entry| match entry {
-            Ok(e) => Some(e.path()),
-            Err(_) => None,
-        })
-        .filter(|p| {
-            p.extension()
-                .and_then(|ext| ext.to_str())
-                .map(|s| {
-                    let lower = s.to_lowercase();
-                    matches!(lower.as_str(), "jpg" | "jpeg" | "png")
-                })
-                .unwrap_or(false)
+            Ok(entry) if entry.path().is_file() => {
+                let extension = match get_media_type(&entry.path()) {
+                    Some(ext) => ext,
+                    None => {
+                        log::warn!("Unknown file in the {} directory: {:?}", directory, entry.path());
+                        return None;
+                    }
+                };
+                Some((entry.path(), extension))
+            },
+            Err(e) => {
+                log::error!("Failed to read directory entry: {}", e); 
+                None
+            },
+            _ => None
         })
         .collect();
 
     // Sort filenames
-    media_files.sort_by(|a, b| compare(&a.display().to_string(), &b.display().to_string()));
+    media_files.sort_by(|(a,_), (b,_)| compare(&a.display().to_string(), &b.display().to_string()));
 
     if range_start >= media_files.len() {
         return Ok(LoadImagesResponse { medias: images, no_more_batches: true}); // Return empty if the range is out of bounds
     }
 
     // load cached images if caching enabled and cache directory exists
-    let cache_dir = root_path.join(".cache").join(&directory);
-    let cached_images: HashSet<PathBuf>;
-    if !cache_dir.exists() {
-        if let Err(e) = fs::create_dir_all(&cache_dir) {
+    let cache_directory = root_path.join(".cache").join(&directory);
+    let cached_thumbnails: HashSet<PathBuf>;
+    if !cache_directory.exists() {
+        if let Err(e) = fs::create_dir_all(&cache_directory) {
             log::error!("Failed to create cache directory: {:?}", e);
         }
-        cached_images = HashSet::new()
+        cached_thumbnails = HashSet::new()
     } else {
-        cached_images = load_cache_set(&cache_dir);
+        cached_thumbnails = load_cache_set(&cache_directory);
     }
     
-    // debug timers
-    let mut processed_count = 0;
-    let mut decode_time = Duration::ZERO;
-    let mut read_time = Duration::ZERO;
-    let mut compress_time = Duration::ZERO;
-    let mut save_time = Duration::ZERO;
-
-    for (index, media_full_path) in media_files
+    for (index, (media_full_path, media_extension)) in media_files
         .iter()
         .enumerate()
         .skip(range_start)
         .take(range_stop.saturating_sub(range_start))
     {
-        let mut current_decode_time = Duration::ZERO;
-        let mut current_read_time = Duration::ZERO;
-        let mut current_compress_time = Duration::ZERO;
-        let mut current_save_time = Duration::ZERO;
-
-
-        let media_file = match File::open(media_full_path) {
-            Ok(f) => f,
-            Err(e) => {
-                log::error!("Failed open image file: {:?}", e);
-                continue;
-            },
-        };
-        let media_reader = std::io::BufReader::new(&media_file);
-
-        let media_extension = match media_full_path.extension().and_then(|ext| ext.to_str()) {
-            Some(extension) => extension.to_lowercase(),
-            None => {
-                log::error!("Failed to retrieve file's extension from the image's full path: {:?}", media_full_path);
-                continue;
-            }
-        };
-
         let media_name = match media_full_path.file_stem().and_then(|n| n.to_str()) {
             Some(name) => name.to_string(),
             None => {
@@ -175,96 +210,46 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                 continue;
             },
         };
-
+        
+        let mut image_info: Option<(PathBuf, u32, u32)> = None;
         if !disable_cache {
-            if let Some(cache_img_path) = find_cached_file(media_name.as_str(), &cached_images) {
-                match image::image_dimensions(&cache_img_path) {
+            if let Some(thumbnail_path) = find_cached_file(media_name.as_str(), &cached_thumbnails) {
+                match image::image_dimensions(thumbnail_path) {
                     Err(e) => {
-                        log::error!("Failed to get image dimensions of cached image {}: {:?}", cache_img_path.display(), e);
+                        log::error!("Failed to get image dimensions of cached thumbnail {}: {:?}", thumbnail_path.display(), e);
                     },
-                    Ok((width, height)) => {
-                        images.push(ImageElementData {
-                            index: index as u32,
-                            name: media_name,
-                            path: format!("{}{}", asset_prefix, media_full_path.display()),
-                            thumbnail_path: format!("{}{}", asset_prefix, cache_img_path.display()),
-                            width,
-                            height,
-                        });
-                        continue;
+                    Ok((thumbnail_width, thumbnail_height)) => { 
+                        image_info = Some((thumbnail_path.to_owned(), thumbnail_width, thumbnail_height));
                     }
                 }
             }
-        }
-
-
-
-
-        // reading
-        let start = Instant::now();
-        let mut buffer = Vec::new();
-        if let Err(e) = media_file.take(10 * 1024 * 1024).read_to_end(&mut buffer) {
-            log::error!("Failed to read file: {:?}", e);
-            continue;
-        }
-        current_read_time += start.elapsed();
-
-
-
-
-        // decoding
-        let start = Instant::now();
-        let mut decompressor = match turbojpeg::Decompressor::new() {
-            Ok(d) => d,
-            Err(e) => {
-                log::error!("Failed to create decompressor: {:?}", e);
-                continue;
+        } else {
+            match cache_media_thumbnail(&media_full_path, &cache_directory) {
+                Ok((thumbnail_path, scaled_width, scaled_height)) => {
+                    image_info = Some((thumbnail_path, scaled_width, scaled_height));
+                }
+                Err(e) => {
+                    log::error!("Failed to cache image {}: {:?}", media_full_path.display(), e);
+                }
             }
-        };
-        let scaling = turbojpeg::ScalingFactor::ONE_EIGHTH;
-        if let Err(e) = decompressor.set_scaling_factor(scaling) {
-            log::error!("Failed to set scaling factor: {:?}", e);
-            continue;
         }
-        let scaled_header = decompressor.read_header(&buffer).map_err(|e| e.to_string())?.scaled(scaling);
-        let (width, height) = (scaled_header.width, scaled_header.height);
-        let mut image = turbojpeg::Image {
-            pixels: vec![0u8; width * height * 3],
-            width,
-            pitch: 3 * width, // size of one image row in memory
-            height,
-            format: turbojpeg::PixelFormat::RGB,
+        
+        let (thumbnail_path, width, height) = match image_info {
+            Some(info) => info,
+            None => {
+                // fallback: use the full image instead of a thumbnail
+                let dims = image::image_dimensions(&media_full_path);
+                match dims {
+                    Ok((w, h)) => {
+                        (media_full_path.clone(), w, h)
+                    }
+                    Err(e) => {
+                        log::error!("Failed fallback to get image dimensions {:?}", e);
+                        continue;
+                    }
+                }
+            }       
         };
-        if let Err(e) = decompressor.decompress(&buffer, image.as_deref_mut()) {
-            log::error!("Failed to set scaling factor: {:?}", e);
-            continue;
-        }
-        current_decode_time += start.elapsed();
-
-
-
-
-
-        // Compressing
-        let start = Instant::now();
-        let mut compressor = turbojpeg::Compressor::new().map_err(|e| format!("Failed to create compressor: {:?}", e))?;
-        compressor.set_quality(50).map_err(|e| format!("Failed to set JPEG quality: {:?}", e))?;
-        compressor.set_subsamp(turbojpeg::Subsamp::Sub2x2).map_err(|e| format!("Failed to set JPEG subsampling: {:?}", e))?;
-        let mut output_buf = turbojpeg::OutputBuf::new_owned();
-        compressor.compress(image.as_deref(), &mut output_buf).map_err(|e| format!("Failed to compress JPEG: {:?}", e))?;
-        current_compress_time += start.elapsed();
-
-
-        
-        
-        // saving
-        let start = Instant::now();
-        let thumbnail_path = cache_dir.join(media_full_path.file_name().unwrap().to_str().unwrap().to_string());
-        fs::write(&thumbnail_path, &output_buf).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
-        current_save_time += start.elapsed();
-
-
-
         let path = format!("{}{}", asset_prefix, media_full_path.display());
         let thumbnail_path = format!("{}{}", asset_prefix, thumbnail_path.display());
         images.push(ImageElementData {
@@ -272,25 +257,14 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
             name: media_name,
             path,
             thumbnail_path,
-            width: width as u32,
-            height: height as u32,
+            width,
+            height,
         });
 
         processed_count += 1;
-        decode_time += current_decode_time;
-        read_time += current_read_time;
-        save_time += current_save_time;
-        compress_time += current_compress_time;
     }
 
-    // Print average times
-    if processed_count > 0 {
-        log::info!("\nProcessed count:       {:?}", processed_count);
-        log::info!("Average decode_time:   {:?}", decode_time / processed_count);
-        log::info!("Average read_time:     {:?}", read_time / processed_count);
-        log::info!("Average compress_time: {:?}", compress_time / processed_count);
-        log::info!("Average save_time:    {:?}", save_time / processed_count);
-    }
+    log::info!("\nProcessed count:       {:?}", processed_count);
     log::info!("Total batch load time: {:?}", timer.elapsed());
     Ok(LoadImagesResponse { medias: images, no_more_batches: range_stop >= media_files.len() })
 }
