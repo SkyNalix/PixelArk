@@ -110,20 +110,16 @@ fn compress_jpeg_image(image: &turbojpeg::Image<Vec<u8>>) -> Result<turbojpeg::O
     Ok(compressed_image_buffer)
 }
 
-fn save_media_thumbnail(cache_directory: &PathBuf, file_name: String, thumbnail_buffer: turbojpeg::OutputBuf) -> Result<(), String> {
-    let thumbnail_path = cache_directory.join(file_name);
-    fs::write(&thumbnail_path, &thumbnail_buffer).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
-    Ok(())
-}
-
-fn cache_media_thumbnail(media_path: &PathBuf, cache_directory: &PathBuf) -> Result<(PathBuf, u32, u32), String> {
+fn cache_media_thumbnail(media_path: &PathBuf, cache_directory: &PathBuf) -> Result<PathBuf, String> {
     let media_buffer = read_media_file(media_path)?;
     let image = decompress_and_scale_jpeg_image(media_buffer, turbojpeg::ScalingFactor::ONE_EIGHTH)?;
     
     let file_name = media_path.file_name().unwrap().to_str().unwrap().to_string();
     let thumbnail_buffer = compress_jpeg_image(&image)?;
-    save_media_thumbnail(cache_directory, file_name, thumbnail_buffer)?;
-    Ok((PathBuf::from(""), 0, 0))
+
+    let thumbnail_path = cache_directory.join(file_name);
+    fs::write(&thumbnail_path, thumbnail_buffer).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
+    Ok(thumbnail_path)
 }
 
 #[tauri::command(async)]
@@ -210,48 +206,45 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
                 continue;
             },
         };
-        
-        let mut image_info: Option<(PathBuf, u32, u32)> = None;
-        if !disable_cache {
-            if let Some(thumbnail_path) = find_cached_file(media_name.as_str(), &cached_thumbnails) {
-                match image::image_dimensions(thumbnail_path) {
-                    Err(e) => {
-                        log::error!("Failed to get image dimensions of cached thumbnail {}: {:?}", thumbnail_path.display(), e);
-                    },
-                    Ok((thumbnail_width, thumbnail_height)) => { 
-                        image_info = Some((thumbnail_path.to_owned(), thumbnail_width, thumbnail_height));
-                    }
-                }
+
+        let (width, height) = match image::image_dimensions(&media_full_path) {
+            Ok(dimensions) => {
+                dimensions
             }
-        } else {
+            Err(e) => {
+                log::error!("Failed to get image dimensions of {}: {:?}", media_full_path.display(), e);
+                continue;
+            }
+        };
+        
+        let mut thumbnail_path: Option<PathBuf> = None;
+        
+        // try to load cached a thumbnail if it exists
+        if !disable_cache {
+            if let Some(path) = find_cached_file(media_name.as_str(), &cached_thumbnails) {
+                thumbnail_path = Some(path.to_owned());
+            }
+        }
+        
+        // if the cached thumbnail doesn't exist, try to create a new thumbnail image and cache it
+        if thumbnail_path == None {
             match cache_media_thumbnail(&media_full_path, &cache_directory) {
-                Ok((thumbnail_path, scaled_width, scaled_height)) => {
-                    image_info = Some((thumbnail_path, scaled_width, scaled_height));
+                Ok(path) => {
+                    thumbnail_path = Some(path);
                 }
                 Err(e) => {
                     log::error!("Failed to cache image {}: {:?}", media_full_path.display(), e);
                 }
             }
         }
+
+        // if the thumbnail creation failed, fallback to the full image instead of a thumbnail
+        if thumbnail_path == None {
+            thumbnail_path = Some(media_full_path.clone())
+        }
         
-        let (thumbnail_path, width, height) = match image_info {
-            Some(info) => info,
-            None => {
-                // fallback: use the full image instead of a thumbnail
-                let dims = image::image_dimensions(&media_full_path);
-                match dims {
-                    Ok((w, h)) => {
-                        (media_full_path.clone(), w, h)
-                    }
-                    Err(e) => {
-                        log::error!("Failed fallback to get image dimensions {:?}", e);
-                        continue;
-                    }
-                }
-            }       
-        };
         let path = format!("{}{}", asset_prefix, media_full_path.display());
-        let thumbnail_path = format!("{}{}", asset_prefix, thumbnail_path.display());
+        let thumbnail_path = format!("{}{}", asset_prefix, thumbnail_path.unwrap().display());
         images.push(ImageElementData {
             index: index as u32,
             name: media_name,
