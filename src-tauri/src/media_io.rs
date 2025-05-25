@@ -2,36 +2,12 @@ use std::fs;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
+use crate::gallery::MediaElement;
 
 #[derive(PartialEq)]
-pub enum MediaType {
+pub enum MediaFormat {
     JPG,
     PNG
-}
-
-pub fn get_media_type(path: &PathBuf) -> Option<MediaType> {
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            log::error!("Failed to open file {:?}: {}", path, e);
-            return None;
-        }
-    };
-
-    let mut header = [0u8; 8];
-    if let Err(e) = file.read_exact(&mut header) {
-        log::error!("Failed to read header of file {:?}: {}", path, e);
-        return None;
-    }
-
-    if header.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
-        Some(MediaType::PNG)
-    } else if header.starts_with(&[0xFF, 0xD8]) {
-        Some(MediaType::JPG)
-    } else {
-        log::warn!("Unknown image format in file {:?}", path);
-        None
-    }
 }
 
 fn read_media_file(media_path: &PathBuf) -> Result<Vec<u8>, String>{
@@ -155,16 +131,15 @@ fn make_png_thumbnail(media_buffer: Vec<u8>) -> Result<Vec<u8>, String> {
     Ok(jpeg_buf.to_vec())
 }
 
-pub fn cache_media_thumbnail(media_path: &PathBuf, media_extension: &MediaType, cache_directory: &PathBuf) -> Result<PathBuf, String> {
-    let media_buffer = read_media_file(media_path)?;
+pub fn cache_media_thumbnail(media_element: &MediaElement, cache_directory: &PathBuf) -> Result<PathBuf, String> {
+    let media_buffer = read_media_file(&media_element.full_path)?;
 
-    let thumbnail_buffer = match media_extension {
-        MediaType::JPG => make_jpeg_thumbnail(media_buffer),
-        MediaType::PNG => make_png_thumbnail(media_buffer),
+    let thumbnail_buffer = match media_element.media_type {
+        MediaFormat::JPG => make_jpeg_thumbnail(media_buffer),
+        MediaFormat::PNG => make_png_thumbnail(media_buffer),
     }?;
 
-    let file_name = media_path.file_name().unwrap().to_str().unwrap().to_string();
-    let thumbnail_path = cache_directory.join(file_name);
+    let thumbnail_path = cache_directory.join(media_element.media_name.clone() + ".jpg");
     fs::write(&thumbnail_path, thumbnail_buffer).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
     Ok(thumbnail_path)
 }

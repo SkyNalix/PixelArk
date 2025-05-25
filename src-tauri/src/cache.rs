@@ -31,7 +31,7 @@ pub fn load_cache_set(cache_dir: &PathBuf) -> HashSet<PathBuf> {
 
 pub(crate) fn find_cached_file<'a>(file_name: &str, cache_set: &'a HashSet<PathBuf>) -> Option<&'a PathBuf> {
     cache_set.iter().find(|p| {
-        p.file_name()
+        p.file_stem()
             .and_then(|f| f.to_str())
             .map(|f| f == file_name)
             .unwrap_or(false)

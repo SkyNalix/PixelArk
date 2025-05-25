@@ -5,4 +5,5 @@ export interface ImageElementData {
   thumbnail_path: string;
   width: number;
   height: number;
+  size: number; // in kilobytes
 }
