@@ -3,11 +3,12 @@ use natord::compare;
 use serde::Serialize;
 use std::fs;
 use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tauri::State;
 use crate::{get_project_path, ProjectPath};
+use crate::cache::{load_cache_set, find_cached_file};
+use crate::media_io::{cache_media_thumbnail, get_media_type, MediaType};
 
 #[derive(Serialize)]
 pub struct ImageElementData {
@@ -19,20 +20,6 @@ pub struct ImageElementData {
     height: u32,
 }
 
-#[derive(PartialEq)]
-pub enum MediaType {
-    JPG,
-    PNG
-}
-
-pub fn get_media_type(path: &PathBuf) -> Option<MediaType> {
-    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_lowercase();
-    match extension.as_str() {
-        "jpg" | "jpeg" => Some(MediaType::JPG),
-        "png" => Some(MediaType::PNG),
-        _ => None,
-    }
-}
 
 #[derive(Serialize)]
 pub struct LoadImagesResponse {
@@ -40,87 +27,6 @@ pub struct LoadImagesResponse {
     no_more_batches: bool,
 }
 
-pub fn load_cache_set(cache_dir: &PathBuf) -> HashSet<PathBuf> {
-    if !cache_dir.is_dir() {
-        log::warn!("Provided cache path is not a directory: {:?}", cache_dir);
-        return HashSet::new();
-    }
-
-    let entries = fs::read_dir(cache_dir);
-    if let Err(e) = entries {
-        log::warn!("Failed to read cache directory: {:?}", e);
-        return HashSet::new();
-    }
-
-    entries.unwrap().filter_map(
-        |entry| {
-            match entry {
-                Err(e) => {
-                    log::error!("Failed to read a file entry in {:?}: {}", cache_dir, e);
-                    None
-                }
-                Ok(entry) => {
-                   Some(entry.path())
-                }
-            }
-        }
-    ).collect()
-}
-
-fn find_cached_file<'a>(file_name: &str, cache_set: &'a HashSet<PathBuf>) -> Option<&'a PathBuf> {
-    cache_set.iter().find(|p| {
-        p.file_name()
-            .and_then(|f| f.to_str())
-            .map(|f| f == file_name)
-            .unwrap_or(false)
-    })
-}
-
-fn read_media_file(media_path: &PathBuf) -> Result<Vec<u8>, String>{
-    let mut media_file = File::open(media_path).map_err(|e| format!("Failed open image file: {:?}", e.to_string()))?;
-        
-    let mut buffer = Vec::new();
-    media_file.read_to_end(&mut buffer).map_err(|e| format!("Failed to read image file: {:?}", e.to_string()))?;
-    Ok(buffer)
-}
-
-fn decompress_and_scale_jpeg_image(media_buffer: Vec<u8>, scaling: turbojpeg::ScalingFactor) -> Result<turbojpeg::Image<Vec<u8>>, String>{
-    let mut decompressor = turbojpeg::Decompressor::new().map_err(|e| format!("Failed to create decompressor: {:?}", e))?;
-    decompressor.set_scaling_factor(scaling).map_err(|e| format!("Failed to set scaling factor: {:?}", e))?;
-    
-    let scaled_header = decompressor.read_header(&media_buffer).map_err(|e| e.to_string())?.scaled(scaling);
-    let (width, height) = (scaled_header.width, scaled_header.height);
-    let mut image = turbojpeg::Image {
-        pixels: vec![0u8; width * height * 3],
-        width,
-        pitch: 3 * width, // size of one image row in memory
-        height,
-        format: turbojpeg::PixelFormat::RGB,
-    };
-    decompressor.decompress(&media_buffer, image.as_deref_mut()).map_err(|e| format!("Failed to decompress the jpeg image: {:?}", e))?;
-    Ok(image)
-}
-
-fn compress_jpeg_image(image: &turbojpeg::Image<Vec<u8>>) -> Result<turbojpeg::OutputBuf, String> {
-    let mut compressor = turbojpeg::Compressor::new().map_err(|e| format!("Failed to create compressor: {:?}", e))?;
-    compressor.set_quality(50).map_err(|e| format!("Failed to set JPEG quality: {:?}", e))?;
-    compressor.set_subsamp(turbojpeg::Subsamp::Sub2x2).map_err(|e| format!("Failed to set JPEG subsampling: {:?}", e))?;
-    let mut compressed_image_buffer = turbojpeg::OutputBuf::new_owned();
-    compressor.compress(image.as_deref(), &mut compressed_image_buffer).map_err(|e| format!("Failed to compress JPEG: {:?}", e))?;
-    Ok(compressed_image_buffer)
-}
-
-fn cache_media_thumbnail(media_path: &PathBuf, cache_directory: &PathBuf) -> Result<PathBuf, String> {
-    let media_buffer = read_media_file(media_path)?;
-    let image = decompress_and_scale_jpeg_image(media_buffer, turbojpeg::ScalingFactor::ONE_EIGHTH)?;
-    
-    let file_name = media_path.file_name().unwrap().to_str().unwrap().to_string();
-    let thumbnail_buffer = compress_jpeg_image(&image)?;
-
-    let thumbnail_path = cache_directory.join(file_name);
-    fs::write(&thumbnail_path, thumbnail_buffer).map_err(|e| format!("Failed to write cache file: {:?}", e))?;
-    Ok(thumbnail_path)
-}
 
 #[tauri::command(async)]
 pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<LoadImagesResponse, String> {
@@ -207,13 +113,30 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
             },
         };
 
-        let (width, height) = match image::image_dimensions(&media_full_path) {
-            Ok(dimensions) => {
-                dimensions
-            }
-            Err(e) => {
-                log::error!("Failed to get image dimensions of {}: {:?}", media_full_path.display(), e);
-                continue;
+        let (width, height) = {
+            let file = match File::open(&media_full_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    log::error!("Failed to open file {}: {:?}", media_full_path.display(), e);
+                    continue;
+                }
+            };
+
+            let reader = image::ImageReader::new(std::io::BufReader::new(file)).with_guessed_format();
+            let reader = match reader {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Failed to guess image format for {}: {:?}", media_full_path.display(), e);
+                    continue;
+                }
+            };
+
+            match reader.into_dimensions() {
+                Ok(dimensions) => dimensions,
+                Err(e) => {
+                    log::error!("Failed to get image dimensions of {}: {:?}", media_full_path.display(), e);
+                    continue;
+                }
             }
         };
         
@@ -228,7 +151,7 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         
         // if the cached thumbnail doesn't exist, try to create a new thumbnail image and cache it
         if thumbnail_path == None {
-            match cache_media_thumbnail(&media_full_path, &cache_directory) {
+            match cache_media_thumbnail(&media_full_path, media_extension, &cache_directory) {
                 Ok(path) => {
                     thumbnail_path = Some(path);
                 }

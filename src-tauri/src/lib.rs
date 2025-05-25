@@ -4,6 +4,8 @@ use chrono::Local;
 use tauri::State;
 
 mod gallery;
+mod cache;
+mod media_io;
 
 pub struct ProjectPath(Mutex<Option<PathBuf>>);
 
