@@ -5,6 +5,8 @@ You’ll be able to browse images, videos, and other media directly from the int
 
 The app will also let you organize media using tags and provide a clean interface to keep everything easy to access.
 
+This is a learning project, so I'm not accepting merge requests.
+
 ## Tech stack
 
 - Tauri (Rust backend)  
