@@ -1,7 +1,18 @@
-# Tauri + React + Typescript
+# PixelArk
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+**PixelArk** is a desktop app to manage and view media — both local and online — in one place.  
+You’ll be able to browse images, videos, and other media directly from the internet as smoothly as if they were stored locally.
 
-## Recommended IDE Setup
+The app will also let you organize media using tags and provide a clean interface to keep everything easy to access.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+This is a learning project, so I'm not accepting merge requests.
+
+## Tech stack
+
+- Tauri (Rust backend)  
+- ReactJS + TypeScript (Frontend)
+
+## Status
+
+🚧 Work in progress  
+🧪 Not ready for production yet
