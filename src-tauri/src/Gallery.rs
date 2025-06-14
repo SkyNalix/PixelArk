@@ -57,6 +57,7 @@ fn path_to_media_element(path: PathBuf) -> Option<MediaElement> {
         None => return None,
         Some(ImageFormat::Jpeg) => MediaFormat::JPG,
         Some(ImageFormat::Png) => MediaFormat::PNG,
+        Some(ImageFormat::WebP) => MediaFormat::WEBP,
         _ => {
             log::warn!("Unknown image format in file {:?}", path.display());
             return None
@@ -101,7 +102,7 @@ fn path_to_media_element(path: PathBuf) -> Option<MediaElement> {
 pub fn load_images_from_directory(directory: String, start: i32, stop: i32, state: State<ProjectPath>) -> Result<LoadImagesResponse, String> {
     // debug variables
     let timer = Instant::now();
-    let mut processed_count = 0;
+    let mut cached_images_counter = 0;
 
     let disable_cache = true;
     let asset_prefix = "http://asset.localhost/";
@@ -168,7 +169,6 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
         let is_too_small = media_element.size < 1000;
 
         let mut thumbnail_path: Option<PathBuf> = if is_too_small {Some(media_element.full_path.clone())} else {None};
-
         
         // try to load cached a thumbnail if it exists
         if !disable_cache && thumbnail_path == None  {
@@ -177,9 +177,9 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
             }
         }
         
-        
         // if the cached thumbnail doesn't exist, try to create a new thumbnail image and cache it
         if thumbnail_path == None {
+            cached_images_counter += 1;
             match cache_media_thumbnail(&media_element, &cache_directory) {
                 Ok(path) => {
                     thumbnail_path = Some(path);
@@ -206,12 +206,9 @@ pub fn load_images_from_directory(directory: String, start: i32, stop: i32, stat
             height: media_element.height,
             size: media_element.size,
         });
-
-        processed_count += 1;
     }
 
-    log::info!("\nProcessed count:       {:?}", processed_count);
-    log::info!("Total batch load time: {:?}", timer.elapsed());
+    log::info!("Amount of cached images: {:?}. Total batch load time: {:?}", cached_images_counter, timer.elapsed());
     Ok(LoadImagesResponse { medias: images, no_more_batches: range_stop >= media_files.len() })
 }
 
